@@ -1,0 +1,22 @@
+ 
+for period of time
+  quantify firms into bm quintiles
+  quantify firms into small med large based on marketcap
+  retain firms in the highest quintile
+  quantify period as bull or bear market
+  if firm delists, return is 0
+  
+  report table on high BM basket
+    for each indicator, report, mean and median value, exp(indicator)
+  test 1: hi pscore vs lo pscore
+    for n in 1000 samples
+      create pseudo high pscore portfolio
+      create pseudo lo pscore portfolio
+      create real high pscore portfolio
+      create real lo pscore portfolio
+      calculate the differences
+      report return mean, median, p10, p25, p75, p90, VaR, max drawdown, conditional VaR
+      report student t, stat sig
+  test 2: hi pscore vs all bm
+  
+  

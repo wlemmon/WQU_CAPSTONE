@@ -1,0 +1,8 @@
+fund_csv
+fund_feather
+hist_csv
+hist_feather
+fund_csv/*
+fund_feather/*
+hist_csv/*
+hist_feather/*

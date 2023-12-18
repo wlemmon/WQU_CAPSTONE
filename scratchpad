@@ -1,0 +1,34 @@
+conda env export --no-builds > environment.yml
+
+conda install python=3.10
+
+jupyter notebook
+
+
+
+https://research-morningstar-com.ezproxy.spl.org/quotes/0P000001IK
+
+https://github.com/pranjal-joshi/Screeni-py
+
+pip install git+https://github.com/dpguthrie/yahooquery
+
+
+
+pip install matplotlib 
+
+pip install financetoolkit -U
+
+pip install financedatabase -U
+
+
+pip install jupyterlab
+
+pip install notebook
+
+pip install backtesting
+
+pip install bokeh==2.4.3
+
+
+mklink /D "C:\Users\lemmonw\anaconda3-2\envs\yahooquery\Lib\site-packages\financetoolkit" "D:\WQU_CAPSTONE\FinanceToolkit-main\financetoolkit"
+
