@@ -14,8 +14,6 @@ def rel(dir):
     return os.path.join(project_root, dir)
 import numpy as np
 import pandas as pd
-# def clean_ticker(ticker):
-  # return s.replace('/', '').replace('.','')
 pd.set_option('display.max_rows', 50000)
 pd.set_option('display.max_columns', 50000)
 
@@ -41,11 +39,10 @@ def get_tickers():
   base_url='D:/WQU_CAPSTONE/FinanceDatabase-main/compression/'
   equities = fd.Equities(base_url=base_url, use_local_location=False)
   tkus = equities.search(market=['NASDAQ Capital Market', 'NASDAQ Global Select', 'New York Stock Exchange'])
-  #print(tkus.market.unique())
-  #print(tkus.exchange.unique())
   _tickers = tkus.index.tolist()
   # remove some problematic tickers
   _tickers.remove('NVCN')
+  _tickers.remove('VBIV')
   tickers = []
   for t in _tickers:
     if type(t) == str:

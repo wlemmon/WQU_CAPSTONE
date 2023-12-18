@@ -1,0 +1,10 @@
+conda env export --no-builds > environment.yml
+conda install python=3.10
+jupyter notebook
+pip install matplotlib 
+pip install financetoolkit -U
+pip install financedatabase -U
+pip install jupyter
+pip install notebook
+pip install bokeh==2.4.3
+

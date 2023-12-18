@@ -33,14 +33,20 @@ def prepare_universe():
   #df[df.date==2020].isna().sum()
 
 
-  len(df.dropna())
+  #len(df.dropna())
   # drop years where no marketcap exists
   df = df.dropna()
 
-  df[['symbol', 'date']].groupby('date').count()
+  #df[['symbol', 'date']].groupby('date').count()
 
-  df["bm_quintile"] = pd.qcut(df.bm, 5, labels=False)
-  df["mve_quintile"] = pd.qcut(df.mve, 3, labels=['small','med','large'])
+  #df["bm_quintile"] = pd.qcut(df.bm, 5, labels=False)
+  #df["mve_quintile"] = pd.qcut(df.mve, 3, labels=['small','med','large'])
+  
+  # rebalance yearly
+  df['bm_quintile'] = df.groupby('date').bm.transform(lambda x: pd.qcut(x, 5, labels=False, duplicates='drop'))
+  df['mve_quintile'] = df.groupby('date').mve.transform(
+      lambda x: pd.qcut(x, 3, labels=False, duplicates='drop'))
+  # df['mve_quintile'] = df.mve_quintile.astype(int).map({0:'low', 1:'med',2:'high'})
   
   pgroup = {
       0:"lo",
@@ -120,13 +126,14 @@ def computeReturns(portfolio, start, end):
                     (1.0*(eq_wght > 0.0)).mean()
                   ]
   return return_vector
-def get_piotroski_experiment_results(master):
+def get_piotroski_experiment_results(master, years = None):
   max_pfolio_size=10
   trials = 1000
   
-  years = master.date.unique()
-  years.sort()
-  
+  if years is None:
+    years = master.date.unique()
+    years.sort()
+    
   filters = {
     # **{f'p{i}': f'pscore == {i*1.0}' for i in range(10)},
     'plo': 'pscore <= 1.0',
@@ -158,24 +165,44 @@ def get_piotroski_experiment_results(master):
 def run_piotroski_tests(df):
   starts = df.start.unique()
   starts.sort()
-  print(starts)
+  #print(starts)
+  data = []
+  hilos = []
+  hialls = []
+  ps_hilos = []
   for start in starts:#['2020-01-01']:
     hi = df[(df.start == start) & (df.group == 'phi')]
     lo = df[(df.start == start) & (df.group == 'plo')]
     all = df[(df.start == start) & (df.group == 'all')]
     ps_hi = df[(df.start == start) & (df.group == 'ps_hi')]
     ps_lo = df[(df.start == start) & (df.group == 'ps_lo')]
-    print(start)
-    print('hi lo', stats.ttest_ind(hi.returns.values - lo.returns.values, ps_hi.returns.values - ps_lo.returns.values))
-    print('hi al', stats.ttest_ind(hi.returns.values - all.returns.values, ps_hi.returns.values - ps_lo.returns.values))
-  print('all')
-  hi = df[df.group == 'phi']
-  lo = df[df.group == 'plo']
-  all = df[df.group == 'all']
-  ps_hi = df[df.group == 'ps_hi']
-  ps_lo = df[df.group  == 'ps_lo']
-  print('hi lo', stats.ttest_ind(hi.returns.values - lo.returns.values, ps_hi.returns.values - ps_lo.returns.values))
-  print('hi al', stats.ttest_ind(hi.returns.values - all.returns.values, ps_hi.returns.values - ps_lo.returns.values))
+    #print(start)
+    _min = np.array([len(hi), len(lo), len(all), len(ps_hi), len(ps_lo)]).min()
+    if _min == 0:
+      #print('cannot test', start, len(hi), len(lo), len(all), len(ps_hi), len(ps_lo))
+      continue
+    hilo = hi.returns.values[:_min] - lo.returns.values[:_min]
+    ps_hilo = ps_hi.returns.values[:_min] - ps_lo.returns.values[:_min]
+    hiall = hi.returns.values[:_min] - all.returns.values[:_min]
+    hilos.append(hilo[:20])
+    ps_hilos.append(ps_hilo[:20])
+    hialls.append(hiall[:20])
+    t_hilo = stats.ttest_ind(hilo, ps_hilo)
+    t_hiall = stats.ttest_ind(hi.returns.values[:_min] - all.returns.values[:_min], ps_hi.returns.values[:_min] - ps_lo.returns.values[:_min])
+    data.append([start, end, 'high - low', _min, hilo.mean(), ps_hilo.mean(), t_hilo.statistic, t_hilo.pvalue])
+    data.append([start, end, 'high - all', _min, hiall.mean(), ps_hilo.mean(), t_hiall.statistic, t_hiall.pvalue])
+  hilos = np.concatenate(hilos)
+  hialls = np.concatenate(hialls)
+  ps_hilos = np.concatenate(ps_hilos)
+  print(hilos.shape)
+  
+  t_hilos = stats.ttest_ind(hilos, ps_hilos)
+  data.append(['--', '--', 'high - low', len(hilos), hilos.mean(), ps_hilos.mean(), t_hilos.statistic, t_hilos.pvalue])
+  t_hialls = stats.ttest_ind(hialls, ps_hilos)
+  data.append(['--', '--', 'high - all', len(hilos), hialls.mean(), ps_hilos.mean(), t_hialls.statistic, t_hialls.pvalue])
+    
+    
+  return pd.DataFrame(columns=['start', 'end', 'test', 'n', 'mu1', 'mu2', 't-statistic', 'p-value'], data=data)
 
 def bull_bear(master):
   df = get_hist('^GSPC')[['adjClose']]
