@@ -5,6 +5,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy import stats
 
+MARKET_TICKER = '^GSPC'
+
 # if the symbol has no marketcap, there is no historical data for that year
 np.set_printoptions(edgeitems=3000, linewidth=1000)
 pd.options.display.max_rows = 100000
@@ -12,6 +14,21 @@ pd.options.display.max_columns = 100000
 # AAPL cash flow statement only goes back to 1989 while income statement
 # goes back to 1985. so columns like commonstockissued will be nan and 
 # we dont want to drop the whole row so first fill nan
+
+pd.set_option("display.precision", 2)
+
+styles = [dict(selector="caption",
+       props=[
+              ("font-family", "Times New Roman"),
+              ("text-align", "center"),
+              ("font-size", "150%"),
+              ("color", 'black')
+             ]),
+  dict(selector="td",
+     props=[("font-family", "Times New Roman")]),
+  dict(selector="th",
+     props=[("font-family", "Times New Roman")])
+]
 
 def prepare_universe():
   df = pd.read_feather('master_screener.feather')
@@ -28,25 +45,15 @@ def prepare_universe():
   df.d_current.fillna(value=0, inplace=True)
   df.d_margin.fillna(value=0, inplace=True)
   df.d_asset.fillna(value=0, inplace=True)
-
-  # only column with nans should be mve
-  #df[df.date==2020].isna().sum()
-
-
-  #len(df.dropna())
   # drop years where no marketcap exists
   df = df.dropna()
 
-  #df[['symbol', 'date']].groupby('date').count()
-
-  #df["bm_quintile"] = pd.qcut(df.bm, 5, labels=False)
-  #df["mve_quintile"] = pd.qcut(df.mve, 3, labels=['small','med','large'])
-  
   # rebalance yearly
   df['bm_quintile'] = df.groupby('date').bm.transform(lambda x: pd.qcut(x, 5, labels=False, duplicates='drop'))
-  df['mve_quintile'] = df.groupby('date').mve.transform(
-      lambda x: pd.qcut(x, 3, labels=False, duplicates='drop'))
-  # df['mve_quintile'] = df.mve_quintile.astype(int).map({0:'low', 1:'med',2:'high'})
+  df['mve_quintile'] = df.groupby('date').mve.transform(lambda x: pd.qcut(x, 3, labels=False, duplicates='drop'))
+  # one 1983 row has mve of na, drop it
+  df = df[~df.mve_quintile.isna()]
+  #df['mve_quintile'] = df.mve_quintile.astype(int).map({0:'low', 1:'med',2:'high'})
   
   pgroup = {
       0:"lo",
@@ -61,9 +68,20 @@ def prepare_universe():
       9:"hi"
   }
 
+  
   df['pscore_group'] = df.pscore.astype(int).map(pgroup)
   #df = df[df.bm_quintile==4]
 
+  df = df.rename(columns={
+    'current':'liquid',
+    'd_current': 'd_liquid',
+    'id_current':'id_liquid',
+    'd_asset': 'd_turn',
+    'id_asset':'id_turn',
+    'i_shares': 'eq_offer'})
+    
+  df['accrual'] = df.cf - df.roa
+  
   return df
 
 
@@ -84,7 +102,7 @@ def get_hist(ticker):
             # (hist.index[0] <= end <= hist.index[-1])
           # )
 
-@lru_cache(maxsize=100000)
+@lru_cache(maxsize=1000000)
 def computeIndividualReturn(ticker, start, end):
     
   df = get_hist(ticker)
@@ -102,16 +120,24 @@ def computeIndividualReturn(ticker, start, end):
     asdf
   return returns
 
+return_vector_field_names = ['ret', 'p0', 'p10', 'p25', 'p50', 'p75', 'p90', 'max', 'mean', 'positive', 'ma_ret']
 def computeReturns(portfolio, start, end):
-  symbols = portfolio.symbol.tolist()
-  returns = [computeIndividualReturn(ticker, start, end) for ticker in symbols]
+  
+  if isinstance(portfolio, pd.Series):
+    # for apply, work with series instead of dataframe
+    returns = [computeIndividualReturn(portfolio.symbol, start, end)]
+  else:
+    symbols = portfolio.symbol.tolist()
+    returns = [computeIndividualReturn(ticker, start, end) for ticker in symbols]
   returns = [r for r in returns if r is not None]
+
+  
   if len(returns) == 0:
     return None
   try:
     width = np.array([len(r) for r in returns]).max()
   except:
-    print(len(r))
+    print(len(returns))
     asdf
   returns2 = np.zeros((len(returns), width))
   for i, r in enumerate(returns):
@@ -120,12 +146,38 @@ def computeReturns(portfolio, start, end):
   # equal weighted portolio returns
   eq_wght = returns2.mean(axis=0)
   
+  market_return = computeIndividualReturn(MARKET_TICKER, start, end)
+  # [ABS RETURN, P0, P10, P25, P50, P75, P90, P100, AVG RET, AVG POS RET, MARKET ADJUSTED RET]
   return_vector = [eq_wght[-1], 
                     *np.percentile(eq_wght, [0, 10, 25, 50, 75, 90, 100]).tolist(), 
                     eq_wght.mean(), 
-                    (1.0*(eq_wght > 0.0)).mean()
+                    (1.0*(eq_wght > 0.0)).mean(),
+                  eq_wght[-1] - market_return[-1]
                   ]
   return return_vector
+  
+def get_individual_ticker_spearman_correlation(master, years = None):
+  max_pfolio_size=10
+    
+  rows = []
+  master.apply(lambda x: computeReturns(x, x))
+  for year in years:#[2022]:
+    
+    start = f'{year}-01-01'
+    end = f'{year+1}-01-01'
+    for filtername, filter in filters.items():
+      print(year, filtername)
+      df = basket.query(filter)
+      pfolio_size = min(len(df), max_pfolio_size)
+      if not pfolio_size:
+        print(year, len(df), 'cannot run experiment')
+        continue
+      results = [computeReturns(df.sample(pfolio_size), start, end) for _ in range(trials)]
+      results = [r for r in results if r is not None] 
+      rows.extend([[start, end, filtername, *r, len(df) ] for r in results])
+  final = pd.DataFrame(columns=['start', 'end', 'group', *return_vector_field_names, 'n'], data=rows)
+  return final
+  
 def get_piotroski_experiment_results(master, years = None):
   max_pfolio_size=10
   trials = 1000
@@ -158,7 +210,7 @@ def get_piotroski_experiment_results(master, years = None):
       results = [computeReturns(df.sample(pfolio_size), start, end) for _ in range(trials)]
       results = [r for r in results if r is not None] 
       rows.extend([[start, end, filtername, *r, len(df) ] for r in results])
-  final = pd.DataFrame(columns=['start', 'end', 'group', 'returns', 'p0', 'p10', 'p25', 'p50', 'p75', 'p90', 'max', 'mean', 'positive', 'n'], data=rows)
+  final = pd.DataFrame(columns=['start', 'end', 'group', 'return', 'p0', 'p10', 'p25', 'p50', 'p75', 'p90', 'max', 'mean', 'positive', 'ma_ret', 'n'], data=rows)
   return final
 
  
@@ -205,7 +257,7 @@ def run_piotroski_tests(df):
   return pd.DataFrame(columns=['start', 'end', 'test', 'n', 'mu1', 'mu2', 't-statistic', 'p-value'], data=data)
 
 def bull_bear(master):
-  df = get_hist('^GSPC')[['adjClose']]
+  df = get_hist(MARKET_TCKR)[['adjClose']]
   print(df.index)
   df['dd'] = df.adjClose.div(df.adjClose.cummax()).sub(1)
   df['ddn'] = ((df['dd'] < 0.) & (df['dd'].shift() == 0.)).cumsum()
@@ -229,6 +281,17 @@ def bull_bear(master):
 
   # plt.savefig('bears.png')
   # plt.show()
+  
+  filters = {
+    # **{f'p{i}': f'pscore == {i*1.0}' for i in range(10)},
+    'plo': 'pscore <= 1.0',
+    'phi': 'pscore >= 8.0',
+    #'all': '~index.isnull()',# no filter
+    #'ps_lo': '~index.isnull()',
+    #'ps_hi': '~index.isnull()',
+  }
+  
+  
   max_pfolio_size=10
   trials = 1000
   years = master.date.unique()
@@ -243,25 +306,25 @@ def bull_bear(master):
     for i, type in enumerate(types):
       typeset = type[pd.DatetimeIndex(type['min']).year == year]
       #print(year, typenames[i], typeset)
-      for _, row in typeset.iterrows():
-        start = row["min"].strftime('%Y-%m-%d')
-        end = row["max"].strftime('%Y-%m-%d')
-        print(typenames[i], start, end)
-        pfolio_size = min(len(phi), max_pfolio_size)
-        if not pfolio_size:
-          print(year, len(phi), 'cannot run experiment')
-          continue
-        print(start, end, 'pfolio_size', pfolio_size, 'phi pool size', len(phi))
-        hi = np.stack([computeReturns(phi.sample(pfolio_size), start, end) for _ in range(trials)])
-        al = np.stack([computeReturns(basket.sample(pfolio_size), start, end) for _ in range(trials)])
-    
-        print('hi', np.nanmean(hi, axis=0))
-        #if np.isnan(al).sum() > 0:
-        #  print(al)
-        #  asdf
-        print('al', np.nanmean(al, axis=0))
-        
-      
+      for filtername, filter in filters.items():
+        df = basket.query(filter)
+        for _, row in typeset.iterrows():
+          start = row["min"].strftime('%Y-%m-%d')
+          end = row["max"].strftime('%Y-%m-%d')
+          print(typenames[i], start, end)
+          pfolio_size = min(len(df), max_pfolio_size)
+          if not pfolio_size:
+            print(year, len(df), 'cannot run experiment')
+            continue
+          print(start, end, 'pfolio_size', pfolio_size, 'pool size', len(df))
+          
+          results = [computeReturns(df.sample(pfolio_size), start, end) for _ in range(trials)]
+          results = [r for r in results if r is not None] 
+          rows.extend([[start, end, typenames[i], filtername, *r, len(df) ] for r in results])
+  final = pd.DataFrame(columns=['start', 'end', 'market', 'group', 'returns', 'p0', 'p10', 'p25', 'p50', 'p75', 'p90', 'max', 'mean', 'positive', 'n'], data=rows)
+  return final
+
+
 def panelA(master):
   for pscore in np.arange(0., 9., 1.):
     basket = master[master.pscore == pscore]

@@ -32,7 +32,8 @@ def touch(path):
         os.utime(path, None)
 def sanitize_ticker_name(ticker):
   return ticker.replace('/', '-')
-   
+
+ 
 def get_tickers():
 
   # Initialize the Equities database
@@ -140,7 +141,7 @@ def piotroski_score(comb, hist):
   comb["d_current"] = current_ratio.diff().fillna(value=0)
   comb["id_current"] = 1.0 * (comb.d_current > 0)
 
-  comb["i_shares"] = 1.0*(comb['commonStockIssued'] == 0)
+  comb["i_shares"] = 1.0*(comb['commonStockIssued'] > 0.001 )
 
   gross_margin = (comb['revenue'] - comb['costOfRevenue']) / comb['revenue']
   comb["margin"] = gross_margin
