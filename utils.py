@@ -44,6 +44,12 @@ def get_tickers():
   # remove some problematic tickers
   _tickers.remove('NVCN')
   _tickers.remove('VBIV')
+  # KFS jumps from 0.10 to 36 on 2001-07-11
+  _tickers.remove('KFS')
+  # jumps from 0.12 to 31 on 2020-11-20
+  _tickers.remove('CHRD')
+  _tickers.remove('GGR')
+  _tickers.remvove('ASPAW')
   tickers = []
   for t in _tickers:
     if type(t) == str:

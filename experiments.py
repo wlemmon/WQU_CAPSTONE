@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 from scipy import stats
 
 MARKET_TICKER = '^GSPC'
+return_vector_field_names = ['raw_ret', 'raw_ret_pos', 'raw_avg_ret', 'raw_avg_ret_pos', 'p0', 'p10', 'p25', 'p50', 'p75', 'p90', 'max', 'ma_ret', 'ma_ret_pos', 'ma_avg_ret', 'ma_avg_ret_pos', 'm_ret']
 
 # if the symbol has no marketcap, there is no historical data for that year
 np.set_printoptions(edgeitems=3000, linewidth=1000)
@@ -33,8 +34,6 @@ styles = [dict(selector="caption",
 def prepare_universe():
   df = pd.read_feather('master_screener.feather')
           
-  #df[df.date==2000].isna().sum()        
-          
   df.commonStockIssued.fillna(value=0, inplace=True)
   df.operatingCashFlow.fillna(value=0, inplace=True)
   df.totalAssets.fillna(value=0, inplace=True)
@@ -53,19 +52,19 @@ def prepare_universe():
   df['mve_quintile'] = df.groupby('date').mve.transform(lambda x: pd.qcut(x, 3, labels=False, duplicates='drop'))
   # one 1983 row has mve of na, drop it
   df = df[~df.mve_quintile.isna()]
-  #df['mve_quintile'] = df.mve_quintile.astype(int).map({0:'low', 1:'med',2:'high'})
+  df['mve_quintile'] = df.mve_quintile.astype(int).map({0:'0:low', 1:'1:med',2:'2:high'})
   
   pgroup = {
-      0:"lo",
-      1:"lo",
-      2:"med",
-      3:"med", 
-      4:"med", 
-      5:"med", 
-      6:"med",
-      7:"med",
-      8:"hi",
-      9:"hi"
+      0:"0-1:lo",
+      1:"0-1:lo",
+      2:"2-7:med",
+      3:"2-7:med", 
+      4:"2-7:med", 
+      5:"2-7:med", 
+      6:"2-7:med",
+      7:"2-7:med",
+      8:"8-9:hi",
+      9:"8-9:hi"
   }
 
   
@@ -91,17 +90,6 @@ def get_hist(ticker):
   feather_hist = rel(f'hist_feather/{ticker}')
   return pd.read_feather(feather_hist)
 
-# def hist_overlap_range(ticker, start, end):
-  # hist = get_hist(ticker)
-  # start = pd.to_datetime(start)
-  # end = pd.to_datetime(end)
-  # return (
-            # (start <= hist.index[0] <= end) or
-            # (start <= hist.index[-1] <= end) or
-            # (hist.index[0] <= start <= hist.index[-1]) or
-            # (hist.index[0] <= end <= hist.index[-1])
-          # )
-
 @lru_cache(maxsize=1000000)
 def computeIndividualReturn(ticker, start, end):
     
@@ -120,7 +108,6 @@ def computeIndividualReturn(ticker, start, end):
     asdf
   return returns
 
-return_vector_field_names = ['ret', 'p0', 'p10', 'p25', 'p50', 'p75', 'p90', 'max', 'mean', 'positive', 'ma_ret']
 def computeReturns(portfolio, start, end):
   
   if isinstance(portfolio, pd.Series):
@@ -130,15 +117,17 @@ def computeReturns(portfolio, start, end):
     symbols = portfolio.symbol.tolist()
     returns = [computeIndividualReturn(ticker, start, end) for ticker in symbols]
   returns = [r for r in returns if r is not None]
-
+  
   
   if len(returns) == 0:
     return None
-  try:
-    width = np.array([len(r) for r in returns]).max()
-  except:
-    print(len(returns))
-    asdf
+  market_return = computeIndividualReturn(MARKET_TICKER, start, end)
+  width = len(market_return)
+  #try:
+  #  width = np.array([len(r) for r in returns]).max()
+  #except:
+  #  print(len(returns))
+  #  asdf
   returns2 = np.zeros((len(returns), width))
   for i, r in enumerate(returns):
     returns2[i, width - len(r):] = r # align to end
@@ -146,38 +135,26 @@ def computeReturns(portfolio, start, end):
   # equal weighted portolio returns
   eq_wght = returns2.mean(axis=0)
   
-  market_return = computeIndividualReturn(MARKET_TICKER, start, end)
+  #market_return = computeIndividualReturn(MARKET_TICKER, start, end)
+  if len(eq_wght) != len(market_return):
+    print(eq_wght)
+    print(market_return)
+  ma_ret = eq_wght - market_return
   # [ABS RETURN, P0, P10, P25, P50, P75, P90, P100, AVG RET, AVG POS RET, MARKET ADJUSTED RET]
-  return_vector = [eq_wght[-1], 
+  return_vector = [ eq_wght[-1], 
+                    (1.0*(eq_wght[-1] > 0.0)).mean(),
+                    eq_wght.mean(),
+                    (1.0*(eq_wght.mean() > 0.0)),
                     *np.percentile(eq_wght, [0, 10, 25, 50, 75, 90, 100]).tolist(), 
-                    eq_wght.mean(), 
-                    (1.0*(eq_wght > 0.0)).mean(),
-                  eq_wght[-1] - market_return[-1]
+                    ma_ret[-1], 
+                    (1.0*(ma_ret[-1] > 0.0)).mean(),
+                    ma_ret.mean(),
+                    (1.0*(ma_ret.mean() > 0.0)),
+                    market_return[-1]
                   ]
   return return_vector
-  
-def get_individual_ticker_spearman_correlation(master, years = None):
-  max_pfolio_size=10
-    
-  rows = []
-  master.apply(lambda x: computeReturns(x, x))
-  for year in years:#[2022]:
-    
-    start = f'{year}-01-01'
-    end = f'{year+1}-01-01'
-    for filtername, filter in filters.items():
-      print(year, filtername)
-      df = basket.query(filter)
-      pfolio_size = min(len(df), max_pfolio_size)
-      if not pfolio_size:
-        print(year, len(df), 'cannot run experiment')
-        continue
-      results = [computeReturns(df.sample(pfolio_size), start, end) for _ in range(trials)]
-      results = [r for r in results if r is not None] 
-      rows.extend([[start, end, filtername, *r, len(df) ] for r in results])
-  final = pd.DataFrame(columns=['start', 'end', 'group', *return_vector_field_names, 'n'], data=rows)
-  return final
-  
+
+
 def get_piotroski_experiment_results(master, years = None):
   max_pfolio_size=10
   trials = 1000
@@ -210,7 +187,7 @@ def get_piotroski_experiment_results(master, years = None):
       results = [computeReturns(df.sample(pfolio_size), start, end) for _ in range(trials)]
       results = [r for r in results if r is not None] 
       rows.extend([[start, end, filtername, *r, len(df) ] for r in results])
-  final = pd.DataFrame(columns=['start', 'end', 'group', 'return', 'p0', 'p10', 'p25', 'p50', 'p75', 'p90', 'max', 'mean', 'positive', 'ma_ret', 'n'], data=rows)
+  final = pd.DataFrame(columns=['start', 'end', 'group', *return_vector_field_names, '|P|'], data=rows)
   return final
 
  
@@ -233,14 +210,14 @@ def run_piotroski_tests(df):
     if _min == 0:
       #print('cannot test', start, len(hi), len(lo), len(all), len(ps_hi), len(ps_lo))
       continue
-    hilo = hi.returns.values[:_min] - lo.returns.values[:_min]
-    ps_hilo = ps_hi.returns.values[:_min] - ps_lo.returns.values[:_min]
-    hiall = hi.returns.values[:_min] - all.returns.values[:_min]
+    hilo = hi.raw_ret.values[:_min] - lo.raw_ret.values[:_min]
+    ps_hilo = ps_hi.raw_ret.values[:_min] - ps_lo.raw_ret.values[:_min]
+    hiall = hi.raw_ret.values[:_min] - all.raw_ret.values[:_min]
     hilos.append(hilo[:20])
     ps_hilos.append(ps_hilo[:20])
     hialls.append(hiall[:20])
     t_hilo = stats.ttest_ind(hilo, ps_hilo)
-    t_hiall = stats.ttest_ind(hi.returns.values[:_min] - all.returns.values[:_min], ps_hi.returns.values[:_min] - ps_lo.returns.values[:_min])
+    t_hiall = stats.ttest_ind(hi.raw_ret.values[:_min] - all.raw_ret.values[:_min], ps_hi.raw_ret.values[:_min] - ps_lo.raw_ret.values[:_min])
     data.append([start, end, 'high - low', _min, hilo.mean(), ps_hilo.mean(), t_hilo.statistic, t_hilo.pvalue])
     data.append([start, end, 'high - all', _min, hiall.mean(), ps_hilo.mean(), t_hiall.statistic, t_hiall.pvalue])
   hilos = np.concatenate(hilos)
@@ -256,9 +233,8 @@ def run_piotroski_tests(df):
     
   return pd.DataFrame(columns=['start', 'end', 'test', 'n', 'mu1', 'mu2', 't-statistic', 'p-value'], data=data)
 
-def bull_bear(master):
-  df = get_hist(MARKET_TCKR)[['adjClose']]
-  print(df.index)
+def classify_bulls_and_bears():
+  df = get_hist(MARKET_TICKER)[['adjClose']]
   df['dd'] = df.adjClose.div(df.adjClose.cummax()).sub(1)
   df['ddn'] = ((df['dd'] < 0.) & (df['dd'].shift() == 0.)).cumsum()
   df['ddmax'] = df.groupby('ddn')['dd'].transform('min')
@@ -266,29 +242,17 @@ def bull_bear(master):
   df['bearn'] = ((df['bear'] == True) & (df['bear'].shift() == False)).cumsum()
 
   bears = df.reset_index().query('bear == True').groupby('bearn').date.agg(['min', 'max'])
-  print(bears)
   bulls = df.reset_index().query('bear == False').groupby('bearn').date.agg(['min', 'max'])
-  print(bulls)
+  return bulls, bears
+def bull_bear(master):
   
-  
-  # df.adjClose.plot()
+  bulls, bears = classify_bulls_and_bears()
 
-  # for i, row in bears.iterrows():
-      # plt.fill_between(row, df.adjClose.max(), alpha=0.25, color='r')
-  # plt.gca().yaxis.set_major_formatter(plt.matplotlib.ticker.StrMethodFormatter('{x:,.0f}'))
-  # plt.ylabel('S&P 500 Index (^GSPC)')
-  # plt.title('S&P 500 Index with Bear Markets (> 20% Declines)')
-
-  # plt.savefig('bears.png')
-  # plt.show()
-  
   filters = {
-    # **{f'p{i}': f'pscore == {i*1.0}' for i in range(10)},
+    **{f'p{i}': f'pscore == {i*1.0}' for i in range(10)},
     'plo': 'pscore <= 1.0',
     'phi': 'pscore >= 8.0',
-    #'all': '~index.isnull()',# no filter
-    #'ps_lo': '~index.isnull()',
-    #'ps_hi': '~index.isnull()',
+    'all': '~index.isnull()',
   }
   
   
@@ -299,39 +263,34 @@ def bull_bear(master):
   types = [bears, bulls]
   typenames = ['bear', 'bull']
   results = {}
-  
+  rows = []
   for year in years:
     basket = master[master.date==year]
     phi = basket[basket.pscore >= 8.0]
-    for i, type in enumerate(types):
-      typeset = type[pd.DatetimeIndex(type['min']).year == year]
-      #print(year, typenames[i], typeset)
+    for i, market_type in enumerate(types):
+      # find bull/bear markets starting within the year
+      market_type_for_year = market_type[pd.DatetimeIndex(market_type['min']).year == year]
+      #print('p1', year, typenames[i])
+      #print('p2', market_type_for_year)
       for filtername, filter in filters.items():
         df = basket.query(filter)
-        for _, row in typeset.iterrows():
+        for _, row in market_type_for_year.iterrows():
           start = row["min"].strftime('%Y-%m-%d')
           end = row["max"].strftime('%Y-%m-%d')
-          print(typenames[i], start, end)
+          #print('p3', filtername, typenames[i], start, end)
           pfolio_size = min(len(df), max_pfolio_size)
           if not pfolio_size:
             print(year, len(df), 'cannot run experiment')
             continue
-          print(start, end, 'pfolio_size', pfolio_size, 'pool size', len(df))
+          print(start, end, 'filter=', filtername, 'pfolio_size', pfolio_size, 'pool size', len(df))
           
           results = [computeReturns(df.sample(pfolio_size), start, end) for _ in range(trials)]
           results = [r for r in results if r is not None] 
           rows.extend([[start, end, typenames[i], filtername, *r, len(df) ] for r in results])
-  final = pd.DataFrame(columns=['start', 'end', 'market', 'group', 'returns', 'p0', 'p10', 'p25', 'p50', 'p75', 'p90', 'max', 'mean', 'positive', 'n'], data=rows)
+  final = pd.DataFrame(columns=['start', 'end', 'market', 'group', *return_vector_field_names, '|P|'], data=rows)
   return final
 
 
-def panelA(master):
-  for pscore in np.arange(0., 9., 1.):
-    basket = master[master.pscore == pscore]
-    print(basket.pscore)
-    
-    
 if __name__ == '__main__':
   #duplicate_piotroski_tests(master)
-  #bull_bear(master)
-  panelA(master)
+  classify_bulls_and_bears(master)
