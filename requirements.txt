@@ -7,3 +7,4 @@ pip install financedatabase -U
 pip install jupyter
 pip install notebook
 pip install seaborn
+pip install dataframe_image

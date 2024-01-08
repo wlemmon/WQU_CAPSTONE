@@ -49,7 +49,9 @@ def get_tickers():
   # jumps from 0.12 to 31 on 2020-11-20
   _tickers.remove('CHRD')
   _tickers.remove('GGR')
-  _tickers.remvove('ASPAW')
+  _tickers.remove('ASPAW')
+  # dates jump from 2007 to 2019
+  _tickers.remove('VIAC')
   tickers = []
   for t in _tickers:
     if type(t) == str:
@@ -147,7 +149,7 @@ def piotroski_score(comb, hist):
   comb["d_current"] = current_ratio.diff().fillna(value=0)
   comb["id_current"] = 1.0 * (comb.d_current > 0)
 
-  comb["i_shares"] = 1.0*(comb['commonStockIssued'] > 0.001 )
+  comb["i_shares"] = 1.0*(comb['commonStockIssued'] == 0 )
 
   gross_margin = (comb['revenue'] - comb['costOfRevenue']) / comb['revenue']
   comb["margin"] = gross_margin
