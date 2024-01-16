@@ -307,6 +307,12 @@ def classify_bulls_and_bears():
   bears = df.reset_index().query('bear == True').groupby('bearn').date.agg(['min', 'max'])
   bulls = df.reset_index().query('bear == False').groupby('bearn').date.agg(['min', 'max'])
   return bulls, bears
+  
+def filter_pscores(df):
+  return df[df.group.isin([f'p{i}' for i in range(10)])]
+def filter_pscore_groups(df):
+  return df[df.group.isin(['phi', 'plo', 'pmid'])]
+
 def compute_bull_bear_portfolios(master, bulls, bears):
   # how do the following strategies compare
   # market - market
@@ -316,6 +322,7 @@ def compute_bull_bear_portfolios(master, bulls, bears):
   filters = {
     **{f'p{i}': f'pscore == {i*1.0}' for i in range(10)},
     'plo': 'pscore <= 1.0',
+    'pmid': '(pscore > 1.0) and (pscore < 8.0)',
     'phi': 'pscore >= 8.0',
     'all': '~index.isnull()',
     'market': '',
