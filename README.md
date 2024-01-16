@@ -1,6 +1,20 @@
 # WQU CAPSTONE Project Winter 2023
 This repo houses the code for my project related to piotroski fscore and the effects of market conditions of F-score portfolio performance.
 
+# Installation
+I build a conda virtual environment following these commands:
+-conda install python=3.10
+-pip install matplotlib
+-pip install financetoolkit -U
+-pip install financedatabase -U
+-pip install jupyter
+-pip install notebook
+-pip install seaborn
+-pip install dataframe_image
+
+A dump of all installed packages from my environment can be found in requirements.txt. Running pip install –r requirements.txt should allow you to run the notebooks.
+Run the notebooks by starting jupyter notebook from the main directory.
+
 # Project Track
 Quantitative Fundamentals - Applications of Piotroski F-Score. I will be doing research, less
 application.
