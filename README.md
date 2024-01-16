@@ -1,5 +1,5 @@
 # WQU CAPSTONE Project Winter 2023
-Welcome! This is my main repo for housing code for my project related to piotroski fscore. 
+This repo houses the code for my project related to piotroski fscore and the effects of market conditions of F-score portfolio performance.
 
 # Project Track
 Quantitative Fundamentals - Applications of Piotroski F-Score. I will be doing research, less
