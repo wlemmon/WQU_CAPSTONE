@@ -51,3 +51,7 @@ non-bubbles in US market and possibly other emerging markets, time granting.
 obtain data from the same sources as those works for reproducibility.
 * Analysis will be performed in python.
 * Since I'm a solo worker on this Capstone, no collaboration is required.
+* 
+# Notes
+I did not include the downloaded data in this repo. The downloaded data is greater than 700MB. When running the download scripts, first create these folders to store downloaded files:
+[excluded data folders](tables/missing_data.png)
